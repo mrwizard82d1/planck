@@ -1,0 +1,14 @@
+Source: planck
+Section: devel
+Priority: optional
+Maintainer: Mike Fikes <mike@fikesfarm.com>
+Standards-Version: 3.9.5
+Build-Depends: debhelper (>= 7)
+Vcs-Bzr: lp:ubuntu/planck
+Homepage: http://planck-repl.org
+
+Package: planck
+Architecture: any
+Depends: ${shlibs:Depends}
+Description: Standalone ClojureScript REPL
+ Planck launches instantly and is useful for scripting.
