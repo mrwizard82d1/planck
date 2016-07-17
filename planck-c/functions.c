@@ -639,6 +639,31 @@ JSValueRef function_file_output_stream_close(JSContextRef ctx, JSObjectRef funct
 	return JSValueMakeNull(ctx);
 }
 
+JSValueRef function_is_directory(JSContextRef ctx, JSObjectRef function, JSObjectRef thisObject,
+											 size_t argc, const JSValueRef args[], JSValueRef* exception) {
+	if (argc == 1
+		&& JSValueGetType(ctx, args[0]) == kJSTypeString) {
+
+		char *path = value_to_c_string(ctx, args[0]);
+
+		bool is_directory = false;
+
+		struct stat file_stat;
+
+		int retval = lstat(path, &file_stat);
+
+		free(path);
+
+		if (retval == 0) {
+			is_directory = S_ISDIR(file_stat.st_mode);
+		}
+
+		return JSValueMakeBoolean(ctx, is_directory);
+
+	}
+	return JSValueMakeNull(ctx);
+}
+
 JSValueRef function_fstat(JSContextRef ctx, JSObjectRef function, JSObjectRef thisObject,
 									  size_t argc, const JSValueRef args[], JSValueRef* exception) {
 	if (argc == 1
