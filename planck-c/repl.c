@@ -5,6 +5,8 @@
 #include <string.h>
 #include <pthread.h>
 #include <unistd.h>
+#include<sys/socket.h>
+#include<arpa/inet.h>
 
 #include "linenoise.h"
 
@@ -347,6 +349,84 @@ void highlight_cancel() {
     }
 }
 
+int sock_to_write_to = 0;
+
+void socket_sender(const char *text) {
+    if (sock_to_write_to) {
+        write(sock_to_write_to, text, strlen(text));
+    }
+}
+
+void *connection_handler(void *socket_desc) {
+
+    int sock = *(int *) socket_desc;
+    ssize_t read_size;
+    char *message, client_message[2000];
+
+    message = "cljs.user=> ";
+    write(sock, message, strlen(message));
+
+    while ((read_size = recv(sock, client_message, 2000, 0)) > 0) {
+        sock_to_write_to = sock;
+        cljs_set_print_sender(global_ctx, &socket_sender);
+
+        process_line(global_ctx, strdup(client_message));
+
+        cljs_set_print_sender(global_ctx, nil);
+        sock_to_write_to = 0;
+    }
+
+    free(socket_desc);
+
+    return NULL;
+}
+
+void *accept_connections(void *data) {
+
+    int socket_desc, new_socket, c, *new_sock;
+    struct sockaddr_in server, client;
+
+    socket_desc = socket(AF_INET, SOCK_STREAM, 0);
+    if (socket_desc == -1) {
+        perror("Could not create listen socket");
+        return NULL;
+    }
+
+    server.sin_family = AF_INET;
+    server.sin_addr.s_addr = INADDR_ANY;
+    server.sin_port = htons(8889);
+
+    if (bind(socket_desc, (struct sockaddr *) &server, sizeof(server)) < 0) {
+        perror("Socket bind failed");
+        return NULL;
+    }
+
+    listen(socket_desc, 3);
+
+    // TODO: format address:port
+    fprintf(stdout, "Planck socket REPL listening at localhost:8889.\n");
+
+    c = sizeof(struct sockaddr_in);
+    while ((new_socket = accept(socket_desc, (struct sockaddr *) &client, (socklen_t *) &c))) {
+
+        pthread_t handler_thread;
+        new_sock = malloc(1);
+        *new_sock = new_socket;
+
+        if (pthread_create(&handler_thread, NULL, connection_handler, (void *) new_sock) < 0) {
+            perror("could not create thread");
+            return NULL;
+        }
+    }
+
+    if (new_socket < 0) {
+        perror("accept failed");
+        return NULL;
+    }
+
+    return NULL;
+}
+
 int run_repl(JSContextRef ctx) {
     global_ctx = ctx;
 
@@ -373,6 +453,11 @@ int run_repl(JSContextRef ctx) {
         linenoiseSetHighlightCallback(highlight);
         linenoiseSetHighlightCancelCallback(highlight_cancel);
     }
+
+    // TODO: pass address and port
+    // TODO: only conditionally start accepting socket connections
+    pthread_t thread;
+    pthread_create(&thread, NULL, accept_connections, (void *) NULL);
 
     run_cmdline_loop(ctx);
 
