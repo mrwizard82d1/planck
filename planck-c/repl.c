@@ -391,7 +391,7 @@ void *connection_handler(void *socket_desc) {
 
         process_line(repl_state, global_ctx, strdup(client_message));
 
-        cljs_set_print_sender(global_ctx, nil);
+        cljs_set_print_sender(global_ctx, NULL);
         sock_to_write_to = 0;
 
         write(sock, repl_state->current_prompt, strlen(repl_state->current_prompt));
@@ -480,8 +480,8 @@ int run_repl(JSContextRef ctx) {
 
     // TODO: pass address and port
     // TODO: only conditionally start accepting socket connections
-    pthread_t thread;
-    pthread_create(&thread, NULL, accept_connections, (void *) NULL);
+    //pthread_t thread;
+    //pthread_create(&thread, NULL, accept_connections, (void *) NULL);
 
     run_cmdline_loop(repl_state, ctx);
 
