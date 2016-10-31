@@ -381,10 +381,9 @@ void *connection_handler(void *socket_desc) {
 
     int sock = *(int *) socket_desc;
     ssize_t read_size;
-    char *message, client_message[2000];
+    char client_message[2000];
 
-    message = "cljs.user=> ";
-    write(sock, message, strlen(message));
+    write(sock, repl_state->current_prompt, strlen(repl_state->current_prompt));
 
     while ((read_size = recv(sock, client_message, 2000, 0)) > 0) {
         sock_to_write_to = sock;
@@ -394,6 +393,8 @@ void *connection_handler(void *socket_desc) {
 
         cljs_set_print_sender(global_ctx, nil);
         sock_to_write_to = 0;
+
+        write(sock, repl_state->current_prompt, strlen(repl_state->current_prompt));
     }
 
     free(socket_desc);
@@ -414,7 +415,7 @@ void *accept_connections(void *data) {
 
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = INADDR_ANY;
-    server.sin_port = htons(8889);
+    server.sin_port = htons(8888);
 
     if (bind(socket_desc, (struct sockaddr *) &server, sizeof(server)) < 0) {
         perror("Socket bind failed");
@@ -424,7 +425,7 @@ void *accept_connections(void *data) {
     listen(socket_desc, 3);
 
     // TODO: format address:port
-    fprintf(stdout, "Planck socket REPL listening at localhost:8889.\n");
+    fprintf(stdout, "Planck socket REPL listening at localhost:8888.\n");
 
     c = sizeof(struct sockaddr_in);
     while ((new_socket = accept(socket_desc, (struct sockaddr *) &client, (socklen_t *) &c))) {
