@@ -35,7 +35,7 @@ void usage(char *program_name) {
     printf("    -v, --verbose            Emit verbose diagnostic output\n");
     printf("    -d, --dumb-terminal      Disable line editing / VT100 terminal control\n");
     printf("    -t theme, --theme=theme  Set the color theme\n");
-    // printf("    -n x, --socket-repl=x    Enable socket REPL where x is port or IP:port\n");
+    printf("    -n x, --socket-repl=x    Enable socket REPL where x is port or IP:port\n");
     printf("    -s, --static-fns         Generate static dispatch function calls\n");
     printf("    -a, --elide-asserts      Set *assert* to false to remove asserts\n");
     printf("\n");
