@@ -415,7 +415,7 @@ void *accept_connections(void *data) {
 
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = INADDR_ANY;
-    server.sin_port = htons(8888);
+    server.sin_port = htons(config.socket_repl_port);
 
     if (bind(socket_desc, (struct sockaddr *) &server, sizeof(server)) < 0) {
         perror("Socket bind failed");
@@ -424,8 +424,7 @@ void *accept_connections(void *data) {
 
     listen(socket_desc, 3);
 
-    // TODO: format address:port
-    fprintf(stdout, "Planck socket REPL listening at localhost:8888.\n");
+    fprintf(stdout, "Planck socket REPL listening at %s:%d.\n", config.socket_repl_host, config.socket_repl_port);
 
     c = sizeof(struct sockaddr_in);
     while ((new_socket = accept(socket_desc, (struct sockaddr *) &client, (socklen_t *) &c))) {
@@ -478,11 +477,10 @@ int run_repl(JSContextRef ctx) {
         linenoiseSetHighlightCancelCallback(highlight_cancel);
     }
 
-    // TODO: pass address and port
-    // TODO: only conditionally start accepting socket connections
-    //pthread_t thread;
-    //pthread_create(&thread, NULL, accept_connections, (void *) NULL);
-
+    if (config.socket_repl_port) {
+        pthread_t thread;
+        pthread_create(&thread, NULL, accept_connections, (void *) NULL);
+    }
     run_cmdline_loop(repl_state, ctx);
 
     return exit_value;

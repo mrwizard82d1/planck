@@ -172,6 +172,9 @@ int main(int argc, char **argv) {
 
     config.main_ns_name = NULL;
 
+    config.socket_repl_port= 0;
+    config.socket_repl_host = NULL;
+
     struct option long_options[] = {
             {"help",          no_argument,       NULL, 'h'},
             {"legal",         no_argument,       NULL, 'l'},
@@ -183,6 +186,7 @@ int main(int argc, char **argv) {
             {"cache",         required_argument, NULL, 'k'},
             {"eval",          required_argument, NULL, 'e'},
             {"theme",         required_argument, NULL, 't'},
+            {"socket-repl",   required_argument, NULL, 'n'},
             {"dumb-terminal", no_argument,       NULL, 'd'},
             {"classpath",     required_argument, NULL, 'c'},
             {"auto-cache",    no_argument,       NULL, 'K'},
@@ -197,7 +201,7 @@ int main(int argc, char **argv) {
     };
     int opt, option_index;
     bool did_encounter_main_opt = false;
-    while (!did_encounter_main_opt && (opt = getopt_long(argc, argv, "h?lvrsak:je:t:dc:o:Ki:qm:", long_options, &option_index)) != -1) {
+    while (!did_encounter_main_opt && (opt = getopt_long(argc, argv, "h?lvrsak:je:t:n:dc:o:Ki:qm:", long_options, &option_index)) != -1) {
         switch (opt) {
             case 'h':
                 usage(argv[0]);
@@ -266,6 +270,17 @@ int main(int argc, char **argv) {
                 break;
             case 't':
                 config.theme = strdup(optarg);
+                break;
+            case 'n':
+                config.socket_repl_host = malloc(256);
+                if (sscanf(optarg, "%255[^:]:%d", config.socket_repl_host, &config.socket_repl_port) != 2) {
+                    strcpy(config.socket_repl_host, "localhost");
+                    if (sscanf(optarg, "%d", &config.socket_repl_port) != 1) {
+                        printf("Could not parse socket REPL params.\n");
+                        free(config.socket_repl_host);
+                        config.socket_repl_port = 0;
+                    }
+                }
                 break;
             case 'd':
                 config.dumb_terminal = true;
