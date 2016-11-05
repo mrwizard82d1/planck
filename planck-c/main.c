@@ -357,7 +357,7 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < config.num_scripts; i++) {
         struct script script = config.scripts[i];
-        evaluate_source(ctx, script.type, script.source, script.expression, false, NULL, config.theme, true);
+        evaluate_source(ctx, script.type, script.source, script.expression, false, NULL, config.theme, true, 0);
         if (exit_value != EXIT_SUCCESS) {
             return exit_value;
         }
@@ -384,7 +384,7 @@ int main(int argc, char **argv) {
             script.expression = false;
         }
 
-        evaluate_source(ctx, script.type, script.source, script.expression, false, NULL, config.theme, true);
+        evaluate_source(ctx, script.type, script.source, script.expression, false, NULL, config.theme, true, 0);
     } else if (config.repl) {
         if (!config.quiet) {
             banner();

@@ -28,7 +28,7 @@ struct repl_state {
     int indent_space_count;
     size_t num_previous_lines;
     char **previous_lines;
-    long socket_repl_session_id;
+    int session_id;
 };
 
 typedef struct repl_state repl_state_t;
@@ -42,7 +42,7 @@ repl_state_t* make_repl_state() {
     repl_state->indent_space_count = 0;
     repl_state->num_previous_lines = 0;
     repl_state->previous_lines = NULL;
-    repl_state->socket_repl_session_id = 0;
+    repl_state->session_id = 0;
     return repl_state;
 }
 
@@ -125,7 +125,7 @@ bool process_line(repl_state_t* repl_state, JSContextRef ctx, char *input_line) 
     if (strcmp(repl_state->input, ":cljs/quit") == 0 ||
         strcmp(repl_state->input, "quit") == 0 ||
         strcmp(repl_state->input, "exit") == 0) {
-        if (repl_state->socket_repl_session_id == 0) {
+        if (repl_state->session_id == 0) {
             exit_value = EXIT_SUCCESS_INTERNAL;
         }
         return true;
@@ -156,7 +156,8 @@ bool process_line(repl_state_t* repl_state, JSContextRef ctx, char *input_line) 
                 set_int_handler();
 
                 // TODO: set exit value
-                evaluate_source(ctx, "text", repl_state->input, true, true, repl_state->current_ns, config.theme, true);
+                evaluate_source(ctx, "text", repl_state->input, true, true, repl_state->current_ns, config.theme, true,
+                                repl_state->session_id);
 
                 clear_int_handler();
 
@@ -373,11 +374,13 @@ void socket_sender(const char *text) {
     }
 }
 
+static int session_id_counter = 0;
+
 void *connection_handler(void *socket_desc) {
     repl_state_t* repl_state = make_repl_state();
     repl_state->current_prompt = form_prompt(repl_state->current_ns, false);
 
-    repl_state->socket_repl_session_id = (long)repl_state;
+    repl_state->session_id = ++session_id_counter;
 
     int sock = *(int *) socket_desc;
     ssize_t read_size;
@@ -424,7 +427,9 @@ void *accept_connections(void *data) {
 
     listen(socket_desc, 3);
 
-    fprintf(stdout, "Planck socket REPL listening at %s:%d.\n", config.socket_repl_host, config.socket_repl_port);
+    if (!config.quiet) {
+        fprintf(stdout, "Planck socket REPL listening at %s:%d.\n", config.socket_repl_host, config.socket_repl_port);
+    }
 
     c = sizeof(struct sockaddr_in);
     while ((new_socket = accept(socket_desc, (struct sockaddr *) &client, (socklen_t *) &c))) {
