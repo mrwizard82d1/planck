@@ -20,7 +20,7 @@ pthread_mutex_t eval_lock = PTHREAD_MUTEX_INITIALIZER;
 
 JSContextRef global_ctx;
 
-struct repl_state {
+struct repl {
     char *current_ns;
     char *current_prompt;
     char *history_path;
@@ -31,28 +31,28 @@ struct repl_state {
     int session_id;
 };
 
-typedef struct repl_state repl_state_t;
+typedef struct repl repl_t;
 
-repl_state_t* make_repl_state() {
-    repl_state_t* repl_state = malloc(sizeof(repl_state_t));
-    repl_state->current_ns = strdup("cljs.user");
-    repl_state->current_prompt = NULL;
-    repl_state->history_path = NULL;
-    repl_state->input = NULL;
-    repl_state->indent_space_count = 0;
-    repl_state->num_previous_lines = 0;
-    repl_state->previous_lines = NULL;
-    repl_state->session_id = 0;
-    return repl_state;
+repl_t* make_repl() {
+    repl_t* repl = malloc(sizeof(repl_t));
+    repl->current_ns = strdup("cljs.user");
+    repl->current_prompt = NULL;
+    repl->history_path = NULL;
+    repl->input = NULL;
+    repl->indent_space_count = 0;
+    repl->num_previous_lines = 0;
+    repl->previous_lines = NULL;
+    repl->session_id = 0;
+    return repl;
 }
 
-void empty_previous_lines(repl_state_t* repl_state) {
-    for (int i = 0; i < repl_state->num_previous_lines; i++) {
-        free(repl_state->previous_lines[i]);
+void empty_previous_lines(repl_t* repl) {
+    for (int i = 0; i < repl->num_previous_lines; i++) {
+        free(repl->previous_lines[i]);
     }
-    free(repl_state->previous_lines);
-    repl_state->num_previous_lines = 0;
-    repl_state->previous_lines = NULL;
+    free(repl->previous_lines);
+    repl->num_previous_lines = 0;
+    repl->previous_lines = NULL;
 }
 
 char *form_prompt(char *current_ns, bool is_secondary) {
@@ -106,26 +106,27 @@ bool is_whitespace(char *s) {
     return true;
 }
 
-bool process_line(repl_state_t* repl_state, JSContextRef ctx, char *input_line) {
+bool process_line(repl_t* repl, JSContextRef ctx, char *input_line) {
+
     // Accumulate input lines
 
-    if (repl_state->input == NULL) {
-        repl_state->input = input_line;
+    if (repl->input == NULL) {
+        repl->input = input_line;
     } else {
-        repl_state->input = realloc(repl_state->input, (strlen(repl_state->input) + strlen(input_line) + 2) * sizeof(char));
-        sprintf(repl_state->input + strlen(repl_state->input), "\n%s", input_line);
+        repl->input = realloc(repl->input, (strlen(repl->input) + strlen(input_line) + 2) * sizeof(char));
+        sprintf(repl->input + strlen(repl->input), "\n%s", input_line);
     }
 
-    repl_state->num_previous_lines += 1;
-    repl_state->previous_lines = realloc(repl_state->previous_lines, repl_state->num_previous_lines * sizeof(char *));
-    repl_state->previous_lines[repl_state->num_previous_lines - 1] = strdup(input_line);
+    repl->num_previous_lines += 1;
+    repl->previous_lines = realloc(repl->previous_lines, repl->num_previous_lines * sizeof(char *));
+    repl->previous_lines[repl->num_previous_lines - 1] = strdup(input_line);
 
     // Check for explicit exit
 
-    if (strcmp(repl_state->input, ":cljs/quit") == 0 ||
-        strcmp(repl_state->input, "quit") == 0 ||
-        strcmp(repl_state->input, "exit") == 0) {
-        if (repl_state->session_id == 0) {
+    if (strcmp(repl->input, ":cljs/quit") == 0 ||
+        strcmp(repl->input, "quit") == 0 ||
+        strcmp(repl->input, "exit") == 0) {
+        if (repl->session_id == 0) {
             exit_value = EXIT_SUCCESS_INTERNAL;
         }
         return true;
@@ -133,9 +134,9 @@ bool process_line(repl_state_t* repl_state, JSContextRef ctx, char *input_line) 
 
     // Add input line to history
 
-    if (repl_state->history_path != NULL && !is_whitespace(repl_state->input)) {
+    if (repl->history_path != NULL && !is_whitespace(repl->input)) {
         linenoiseHistoryAdd(input_line);
-        linenoiseHistorySave(repl_state->history_path);
+        linenoiseHistorySave(repl->history_path);
     }
 
     // Check if we now have readable forms
@@ -145,28 +146,35 @@ bool process_line(repl_state_t* repl_state, JSContextRef ctx, char *input_line) 
     char *balance_text = NULL;
 
     while (!done) {
-        if ((balance_text = cljs_is_readable(ctx, repl_state->input)) != NULL) {
-            repl_state->input[strlen(repl_state->input) - strlen(balance_text)] = '\0';
+        if ((balance_text = cljs_is_readable(ctx, repl->input)) != NULL) {
+            repl->input[strlen(repl->input) - strlen(balance_text)] = '\0';
 
-            if (!is_whitespace(repl_state->input)) { // Guard against empty string being read
+            if (!is_whitespace(repl->input)) { // Guard against empty string being read
                 pthread_mutex_lock(&eval_lock);
 
                 return_termsize = !config.dumb_terminal;
 
-                set_int_handler();
+                if (repl->session_id == 0) {
+                    set_int_handler();
+                }
 
                 // TODO: set exit value
-                evaluate_source(ctx, "text", repl_state->input, true, true, repl_state->current_ns, config.theme, true,
-                                repl_state->session_id);
 
-                clear_int_handler();
+                char* theme = repl->session_id == 0 ? config.theme : "dumb";
+
+                evaluate_source(ctx, "text", repl->input, true, true, repl->current_ns, theme, true,
+                                repl->session_id);
+
+                if (repl->session_id == 0) {
+                    clear_int_handler();
+                }
 
                 return_termsize = false;
 
                 pthread_mutex_unlock(&eval_lock);
 
                 if (exit_value != 0) {
-                    free(repl_state->input);
+                    free(repl->input);
                     return true;
                 }
             } else {
@@ -174,31 +182,31 @@ bool process_line(repl_state_t* repl_state, JSContextRef ctx, char *input_line) 
             }
 
             // Now that we've evaluated the input, reset for next round
-            free(repl_state->input);
-            repl_state->input = balance_text;
+            free(repl->input);
+            repl->input = balance_text;
 
-            empty_previous_lines(repl_state);
+            empty_previous_lines(repl);
 
             // Fetch the current namespace and use it to set the prompt
-            free(repl_state->current_ns);
-            free(repl_state->current_prompt);
+            free(repl->current_ns);
+            free(repl->current_prompt);
 
-            repl_state->current_ns = get_current_ns(ctx);
-            repl_state->current_prompt = form_prompt(repl_state->current_ns, false);
+            repl->current_ns = get_current_ns(ctx);
+            repl->current_prompt = form_prompt(repl->current_ns, false);
 
             if (is_whitespace(balance_text)) {
                 done = true;
-                free(repl_state->input);
-                repl_state->input = NULL;
+                free(repl->input);
+                repl->input = NULL;
             }
         } else {
             // Prepare for reading non-1st of input with secondary prompt
-            if (repl_state->history_path != NULL) {
-                repl_state->indent_space_count = cljs_indent_space_count(ctx, repl_state->input);
+            if (repl->history_path != NULL) {
+                repl->indent_space_count = cljs_indent_space_count(ctx, repl->input);
             }
 
-            free(repl_state->current_prompt);
-            repl_state->current_prompt = form_prompt(repl_state->current_ns, true);
+            free(repl->current_prompt);
+            repl->current_prompt = form_prompt(repl->current_ns, true);
             done = true;
         }
     }
@@ -206,12 +214,12 @@ bool process_line(repl_state_t* repl_state, JSContextRef ctx, char *input_line) 
     return false;
 }
 
-void run_cmdline_loop(repl_state_t* repl_state, JSContextRef ctx) {
+void run_cmdline_loop(repl_t* repl, JSContextRef ctx) {
     while (true) {
         char *input_line = NULL;
 
         if (config.dumb_terminal) {
-            display_prompt(repl_state->current_prompt);
+            display_prompt(repl->current_prompt);
             input_line = get_input();
             if (input_line == NULL) { // Ctrl-D pressed
                 printf("\n");
@@ -230,20 +238,20 @@ void run_cmdline_loop(repl_state_t* repl_state, JSContextRef ctx) {
                 fprintf(stdout, "\n");
             }
 
-            char *line = linenoise(repl_state->current_prompt, prompt_ansi_code_for_theme(config.theme), repl_state->indent_space_count);
+            char *line = linenoise(repl->current_prompt, prompt_ansi_code_for_theme(config.theme), repl->indent_space_count);
 
             // Reset printing handler back
             if (cljs_engine_ready) {
                 cljs_set_print_sender(ctx, NULL);
             }
 
-            repl_state->indent_space_count = 0;
+            repl->indent_space_count = 0;
             if (line == NULL) {
                 if (errno == EAGAIN) { // Ctrl-C
                     errno = 0;
-                    repl_state->input = NULL;
-                    empty_previous_lines(repl_state);
-                    repl_state->current_prompt = form_prompt(repl_state->current_ns, false);
+                    repl->input = NULL;
+                    empty_previous_lines(repl);
+                    repl->current_prompt = form_prompt(repl->current_ns, false);
                     printf("\n");
                     continue;
                 } else { // Ctrl-D
@@ -255,7 +263,7 @@ void run_cmdline_loop(repl_state_t* repl_state, JSContextRef ctx) {
             input_line = line;
         }
 
-        bool break_out = process_line(repl_state, ctx, input_line);
+        bool break_out = process_line(repl, ctx, input_line);
         if (break_out) {
             break;
         }
@@ -316,7 +324,7 @@ void do_highlight_restore(void* data) {
 }
 
 // Used when using linenoise
-repl_state_t* s_repl_state;
+repl_t* s_repl;
 
 void highlight(const char *buf, int pos) {
     char current = buf[pos];
@@ -324,7 +332,7 @@ void highlight(const char *buf, int pos) {
     if (current == ']' || current == '}' || current == ')') {
         int num_lines_up = -1;
         int highlight_pos = 0;
-        cljs_highlight_coords_for_pos(global_ctx, pos, buf, s_repl_state->num_previous_lines, s_repl_state->previous_lines, &num_lines_up,
+        cljs_highlight_coords_for_pos(global_ctx, pos, buf, s_repl->num_previous_lines, s_repl->previous_lines, &num_lines_up,
                                       &highlight_pos);
 
         int current_pos = pos + 1;
@@ -377,27 +385,28 @@ void socket_sender(const char *text) {
 static int session_id_counter = 0;
 
 void *connection_handler(void *socket_desc) {
-    repl_state_t* repl_state = make_repl_state();
-    repl_state->current_prompt = form_prompt(repl_state->current_ns, false);
+    repl_t* repl = make_repl();
+    repl->current_prompt = form_prompt(repl->current_ns, false);
 
-    repl_state->session_id = ++session_id_counter;
+    repl->session_id = ++session_id_counter;
 
     int sock = *(int *) socket_desc;
     ssize_t read_size;
-    char client_message[2000];
+    char client_message[4096];
 
-    write(sock, repl_state->current_prompt, strlen(repl_state->current_prompt));
+    write(sock, repl->current_prompt, strlen(repl->current_prompt));
 
-    while ((read_size = recv(sock, client_message, 2000, 0)) > 0) {
+    while ((read_size = recv(sock, client_message, 4095, 0)) > 0) {
         sock_to_write_to = sock;
         cljs_set_print_sender(global_ctx, &socket_sender);
 
-        process_line(repl_state, global_ctx, strdup(client_message));
+        client_message[read_size] = '\0';
+        process_line(repl, global_ctx, strdup(client_message));
 
         cljs_set_print_sender(global_ctx, NULL);
         sock_to_write_to = 0;
 
-        write(sock, repl_state->current_prompt, strlen(repl_state->current_prompt));
+        write(sock, repl->current_prompt, strlen(repl->current_prompt));
     }
 
     free(socket_desc);
@@ -453,13 +462,13 @@ void *accept_connections(void *data) {
 }
 
 int run_repl(JSContextRef ctx) {
-    repl_state_t* repl_state = make_repl_state();
-    s_repl_state = repl_state;
+    repl_t* repl = make_repl();
+    s_repl = repl;
 
     global_ctx = ctx;
 
-    repl_state->current_ns = strdup("cljs.user");
-    repl_state->current_prompt = form_prompt(repl_state->current_ns, false);
+    repl->current_ns = strdup("cljs.user");
+    repl->current_prompt = form_prompt(repl->current_ns, false);
 
     // Per-type initialization
 
@@ -468,10 +477,10 @@ int run_repl(JSContextRef ctx) {
         if (home != NULL) {
             char history_name[] = ".planck_history";
             size_t len = strlen(home) + strlen(history_name) + 2;
-            repl_state->history_path = malloc(len * sizeof(char));
-            snprintf(repl_state->history_path, len, "%s/%s", home, history_name);
+            repl->history_path = malloc(len * sizeof(char));
+            snprintf(repl->history_path, len, "%s/%s", home, history_name);
 
-            linenoiseHistoryLoad(repl_state->history_path);
+            linenoiseHistoryLoad(repl->history_path);
 
             // TODO: load keymap
         }
@@ -484,9 +493,10 @@ int run_repl(JSContextRef ctx) {
 
     if (config.socket_repl_port) {
         pthread_t thread;
-        pthread_create(&thread, NULL, accept_connections, (void *) NULL);
+        pthread_create(&thread, NULL, accept_connections, NULL);
     }
-    run_cmdline_loop(repl_state, ctx);
+
+    run_cmdline_loop(repl, ctx);
 
     return exit_value;
 }
