@@ -448,13 +448,36 @@ void *cljs_do_engine_init(void *data) {
     return NULL;
 }
 
+void sigusr2_handler(int dummy) {
+}
+
+typedef void (*sighandler_t)(int);
+
+void block_sigusr2_if() {
+
+    /*
+     * Deal with JavaScriptCore's use of SIGUSR2 for thread
+     * suspend/resume. Emperically, we've seen you need to
+     * block SIGUSR2 iff no handler is registered for it
+     * prior to initializing the ClojureScript runtime in
+     * JavaScriptCore.
+     */
+     
+    sighandler_t current_handler = signal(SIGUSR2, sigusr2_handler);
+
+    if (!current_handler) {
+        sigset_t set;
+        sigemptyset(&set);
+        sigaddset(&set, SIGUSR2);
+        pthread_sigmask(SIG_BLOCK, &set, NULL);
+    }
+
+    signal(SIGUSR2, current_handler);
+}
+
 void cljs_engine_init(JSContextRef ctx) {
-    sigset_t set;
-    sigemptyset(&set);
-    // FIXME: Figure out where SIGUSR2 comes from
-    //   (Without blocking SIGUSR2 things mysteriously don't work)
-    sigaddset(&set, SIGUSR2);
-    pthread_sigmask(SIG_BLOCK, &set, NULL);
+
+    block_sigusr2_if();
 
     pthread_attr_t attr;
     pthread_attr_init(&attr);
